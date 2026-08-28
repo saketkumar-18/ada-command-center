@@ -31,12 +31,12 @@ body{
   font-size:13px;
   overflow:hidden;
 }
-body::after{ /* scanlines */
+body::after{
   content:"";position:fixed;inset:0;pointer-events:none;z-index:90;
   background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(0,0,0,.14) 2px 4px);
   mix-blend-mode:multiply;
 }
-body::before{ /* vignette */
+body::before{
   content:"";position:fixed;inset:0;pointer-events:none;z-index:89;
   background:radial-gradient(ellipse at 50% 45%,transparent 55%,rgba(0,0,0,.5) 100%);
 }
@@ -63,7 +63,7 @@ body::before{ /* vignette */
   display:flex;flex-direction:column;
   min-height:0;
 }
-.panel::before,.panel::after{ /* corner ticks */
+.panel::before,.panel::after{
   content:"";position:absolute;width:10px;height:10px;pointer-events:none;
   border-color:var(--line-bright);border-style:solid;
 }
@@ -154,6 +154,20 @@ body::before{ /* vignette */
 }
 #voice-btn:hover{background:rgba(53,224,255,.22);box-shadow:0 0 16px rgba(53,224,255,.25)}
 #voice-btn.listening{background:rgba(255,77,94,.15);border-color:var(--red);color:var(--red);animation:pulse 1s infinite}
+
+/* TTS Debug Panel */
+#tts-debug{
+  margin-top:10px;padding:10px;background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:4px;
+  font-size:10px;color:var(--muted);display:none;
+}
+#tts-debug.visible{display:block}
+#tts-debug h4{color:var(--cyan);margin-bottom:8px;font-size:10px;letter-spacing:.2em}
+#tts-debug .row{display:flex;gap:8px;margin:4px 0;align-items:center}
+#tts-debug .row b{color:var(--ink);min-width:100px}
+#tts-debug button{margin-right:6px;margin-top:6px;padding:6px 10px;background:var(--cyan-dim);border:1px solid rgba(53,224,255,.4);color:var(--cyan);font-family:var(--mono);font-size:9px;border-radius:3px;cursor:pointer}
+#tts-debug button:hover{background:rgba(53,224,255,.22)}
+#tts-debug button.warn{background:rgba(255,180,84,.15);border-color:var(--amber);color:var(--amber)}
+#tts-debug .voice-list{max-height:120px;overflow-y:auto;margin-top:6px;padding:6px;background:rgba(0,0,0,.2);border-radius:3px;font-size:9px}
 
 /* ---------- terminal ---------- */
 #term{grid-area:term}
@@ -287,13 +301,28 @@ body::before{ /* vignette */
         <canvas id="wave"></canvas>
         <div id="comms-status">CHANNEL: <b id="comms-mode">STANDBY</b><span style="margin-left:auto" id="tts-state">TTS ON</span></div>
         <button id="voice-btn">▸ Activate Voice Link</button>
+
+        <!-- TTS DEBUG PANEL -->
+        <div id="tts-debug">
+          <h4>TTS DIAGNOSTICS</h4>
+          <div class="row"><b>Voices:</b><span id="dbg-voice-count">loading…</span></div>
+          <div class="row"><b>Selected:</b><span id="dbg-selected-voice">—</span></div>
+          <div class="row"><b>Speaking:</b><span id="dbg-speaking">false</span></div>
+          <div class="row"><b>Pending:</b><span id="dbg-pending">false</span></div>
+          <div class="row"><b>TTS Enabled:</b><span id="dbg-tts-on">true</span></div>
+          <div class="row"><b>Last Error:</b><span id="dbg-last-error" style="color:var(--red)">none</span></div>
+          <button id="btn-test-tts">TEST TTS</button>
+          <button id="btn-unlock-audio" class="warn">UNLOCK AUDIO</button>
+          <button id="btn-toggle-debug">HIDE DEBUG</button>
+          <div class="voice-list" id="dbg-voice-list"></div>
+        </div>
       </div>
     </section>
   </aside>
 
   <!-- TERMINAL -->
   <section id="term" class="panel">
-    <div class="p-head"><span class="dot"></span>SYSTEM TERMINAL<span class="spacer"></span><span class="kbd-hint"><b>V</b> voice&nbsp; <b>S</b> scan&nbsp; <b>M</b> mute&nbsp; <b>HELP</b> commands</span></div>
+    <div class="p-head"><span class="dot"></span>SYSTEM TERMINAL<span class="spacer"></span><span class="kbd-hint"><b>V</b> voice&nbsp; <b>S</b> scan&nbsp; <b>M</b> mute&nbsp; <b>D</b> debug&nbsp; <b>HELP</b> commands</span></div>
     <div class="p-body">
       <div id="term-out"></div>
       <div id="cmdrow">
@@ -480,7 +509,6 @@ function renderLand(W,H){
       c.beginPath();c.arc(col*cw+cw/2,r*ch+ch/2,rad,0,7);c.fill();
     }
   }
-  // faint graticule
   c.strokeStyle="rgba(53,224,255,.05)";c.lineWidth=1;
   for(let i=1;i<12;i++){c.beginPath();c.moveTo(i*W/12,0);c.lineTo(i*W/12,H);c.stroke();}
   for(let i=1;i<6;i++){c.beginPath();c.moveTo(0,i*H/6);c.lineTo(W,i*H/6);c.stroke();}
@@ -500,7 +528,6 @@ function drawMap(now){
   mctx.clearRect(0,0,W,H);
   mctx.drawImage(landCv,0,0);
   const cx=W/2,cy=H/2,R=Math.hypot(W,H)/2;
-  // radar sweep with fading trail
   sweepAng=(now/2600)%(Math.PI*2);
   for(let i=34;i>=0;i--){
     const a=sweepAng-i*.022,al=(1-i/34)*.16;
@@ -509,12 +536,10 @@ function drawMap(now){
     mctx.beginPath();mctx.moveTo(cx,cy);
     mctx.lineTo(cx+Math.cos(a)*R,cy+Math.sin(a)*R);mctx.stroke();
   }
-  // center reticle
   mctx.strokeStyle="rgba(53,224,255,.35)";mctx.lineWidth=1;
   mctx.beginPath();mctx.arc(cx,cy,14,0,7);mctx.stroke();
   mctx.beginPath();mctx.moveTo(cx-22,cy);mctx.lineTo(cx-8,cy);mctx.moveTo(cx+8,cy);mctx.lineTo(cx+22,cy);
   mctx.moveTo(cx,cy-22);mctx.lineTo(cx,cy-8);mctx.moveTo(cx,cy+8);mctx.lineTo(cx,cy+22);mctx.stroke();
-  // contacts
   contacts=contacts.filter(c=>now-c.born<c.life);
   contacts.forEach(c=>{
     const[x,y]=proj(c.lon,c.lat,W,H);
@@ -580,9 +605,9 @@ function ambientLog(){
   $("#st-lat").textContent=ri(9,84)+" ms";
 }
 
-/* ---------- voice ---------- */
+/* ---------- bulletproof TTS ---------- */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-let recog=null,listening=false,ttsOn=true,speaking=false,voicesReady=false;
+let recog=null,listening=false,ttsOn=true,speaking=false,voicesReady=false,audioUnlocked=false;
 const waveCv=$("#wave"),wctx=waveCv.getContext("2d");
 function sizeWave(){
   const r=waveCv.getBoundingClientRect();
@@ -611,28 +636,57 @@ function pickVoice(){
       ||vs.find(v=>/^en/i.test(v.lang))
       ||vs[0];
 }
+function updateDebugPanel(){
+  const vs=speechSynthesis.getVoices();
+  $("#dbg-voice-count").textContent=vs.length||"0 (not loaded)";
+  const v=pickVoice();
+  $("#dbg-selected-voice").textContent=v?v.name+" ["+v.lang+"]":"—";
+  $("#dbg-speaking").textContent=speechSynthesis.speaking?"true":"false";
+  $("#dbg-pending").textContent=speechSynthesis.pending?"true":"false";
+  $("#dbg-tts-on").textContent=ttsOn?"true":"false";
+  if(vs.length){
+    $("#dbg-voice-list").innerHTML=vs.map(v=>`<div>${v.name} [${v.lang}]${v.default?" · DEFAULT":""}</div>`).join("");
+  }
+}
+function unlockAudio(){
+  if(audioUnlocked)return;
+  // play a silent utterance to unlock audio context
+  const u=new SpeechSynthesisUtterance("");
+  u.volume=0;
+  speechSynthesis.speak(u);
+  audioUnlocked=true;
+  log("sys","[SYS]","audio context unlocked");
+  updateDebugPanel();
+}
 function speak(text){
-  if(!ttsOn||!("speechSynthesis" in window))return;
+  if(!ttsOn||!("speechSynthesis" in window)){
+    if(!ttsOn)log("sys","[TTS]","skipped — TTS disabled");
+    return;
+  }
+  unlockAudio(); // ensure audio context is unlocked
   const u=new SpeechSynthesisUtterance(text);
-  u.rate=1.04;u.pitch=1;
+  u.rate=1.04;u.pitch=1;u.volume=1;
   const v=pickVoice();
   if(v)u.voice=v;
-  u.onstart=()=>{speaking=true;$("#comms-mode").textContent="RESPONDING";};
-  u.onend=()=>{speaking=false;$("#comms-mode").textContent=listening?"LISTENING":"STANDBY";};
-  u.onerror=(e)=>{console.warn("TTS error:",e.error);speaking=false;$("#comms-mode").textContent=listening?"LISTENING":"STANDBY";};
-  // don't cancel - can prevent speech in some browsers
+  u.onstart=()=>{speaking=true;$("#comms-mode").textContent="RESPONDING";updateDebugPanel();};
+  u.onend=()=>{speaking=false;$("#comms-mode").textContent=listening?"LISTENING":"STANDBY";updateDebugPanel();};
+  u.onerror=(e)=>{$("#dbg-last-error").textContent=e.error;speaking=false;$("#comms-mode").textContent=listening?"LISTENING":"STANDBY";updateDebugPanel();log("warn","[TTS]","error: "+e.error);};
   speechSynthesis.speak(u);
+  log("sys","[TTS]","speaking: "+text.slice(0,60));
+  updateDebugPanel();
 }
 function respond(text,sayIt=true){
   log("ok","[ADA]",text);
   if(sayIt)speak(text);
 }
+
+/* ---------- commands ---------- */
 function handleCommand(raw){
   const q=raw.trim().toLowerCase().replace(/^(hey |ok |okay )?(ada|jarvis|friday)[, ]*/,"");
   if(!q)return;
   log("user","[OP]",raw.trim());
   if(/^(help|commands)/.test(q)){
-    respond("Available commands: status, scan, threat report, time, gauges, clear, mute, speak. Say ADA followed by any command.");
+    respond("Available commands: status, scan, threat report, time, gauges, clear, mute, speak, debug. Say ADA followed by any command.");
   }else if(/status|report|diagnostic/.test(q)){
     const cpu=Math.round(GAUGES[0].val),mem=Math.round(GAUGES[1].val),pwr=Math.round(GAUGES[3].val);
     respond(`All systems operational. CPU at ${cpu} percent, memory at ${mem} percent, power cell at ${pwr} percent. ${contacts.length} active contacts on the grid. Uplink is secure.`);
@@ -649,15 +703,20 @@ function handleCommand(raw){
   }else if(/clear|reset terminal/.test(q)){
     termOut.innerHTML="";respond("Terminal cleared.",false);
   }else if(/mute|quiet|silence/.test(q)){
-    ttsOn=false;speak("");$("#tts-state").textContent="TTS OFF";log("sys","[SYS]","voice output muted");
+    ttsOn=false;$("#tts-state").textContent="TTS OFF";$("#dbg-tts-on").textContent="false";log("sys","[SYS]","voice output muted");
   }else if(/speak|voice on|unmute/.test(q)){
-    ttsOn=true;$("#tts-state").textContent="TTS ON";respond("Voice output enabled.");
+    ttsOn=true;$("#tts-state").textContent="TTS ON";$("#dbg-tts-on").textContent="true";respond("Voice output enabled.");
   }else if(/hello|hi |hey|^hi$/.test(q)){
     respond("Hello Saket. All systems are online and at your disposal.");
   }else if(/who are you|your name/.test(q)){
     respond("I am ADA, your Autonomous Digital Assistant. Named for Ada Lovelace, the first programmer.");
   }else if(/thank/.test(q)){
     respond("Always a pleasure, Saket.");
+  }else if(/debug/.test(q)){
+    const dbg=$("#tts-debug");
+    dbg.classList.toggle("visible");
+    $("#btn-toggle-debug").textContent=dbg.classList.contains("visible")?"HIDE DEBUG":"SHOW DEBUG";
+    updateDebugPanel();
   }else{
     respond("Command not recognized. Say help for the list of available commands.");
   }
@@ -684,18 +743,26 @@ function toggleVoice(){
   recog.onend=()=>{listening=false;$("#voice-btn").classList.remove("listening");$("#voice-btn").textContent="▸ Activate Voice Link";if(!speaking)$("#comms-mode").textContent="STANDBY";};
   try{recog.start();}catch(e){log("warn","[SYS]","could not start voice link");}
 }
-$("#voice-btn").addEventListener("click",toggleVoice);
+$("#voice-btn").addEventListener("click",()=>{unlockAudio();toggleVoice();});
 $("#cmd").addEventListener("keydown",e=>{
   if(e.key==="Enter"&&e.target.value.trim()){handleCommand(e.target.value);e.target.value="";}
 });
 document.addEventListener("keydown",e=>{
   if(e.target===$("#cmd"))return;
   const k=e.key.toLowerCase();
-  if(k==="v")toggleVoice();
+  if(k==="v"){unlockAudio();toggleVoice();}
   else if(k==="s")runScan();
-  else if(k==="m"){ttsOn=!ttsOn;$("#tts-state").textContent=ttsOn?"TTS ON":"TTS OFF";log("sys","[SYS]","TTS "+(ttsOn?"enabled":"muted"));}
+  else if(k==="m"){ttsOn=!ttsOn;$("#tts-state").textContent=ttsOn?"TTS ON":"TTS OFF";$("#dbg-tts-on").textContent=ttsOn?"true":"false";log("sys","[SYS]","TTS "+(ttsOn?"enabled":"muted"));}
+  else if(k==="d"){const dbg=$("#tts-debug");dbg.classList.toggle("visible");$("#btn-toggle-debug").textContent=dbg.classList.contains("visible")?"HIDE DEBUG":"SHOW DEBUG";updateDebugPanel();}
   else if(k==="/"){e.preventDefault();$("#cmd").focus();}
 });
+// Debug panel buttons
+$("#btn-test-tts").addEventListener("click",()=>{unlockAudio();speak("ADA voice test successful. All systems nominal.");});
+$("#btn-unlock-audio").addEventListener("click",()=>{unlockAudio();updateDebugPanel();});
+$("#btn-toggle-debug").addEventListener("click",()=>{const dbg=$("#tts-debug");dbg.classList.toggle("visible");$("#btn-toggle-debug").textContent=dbg.classList.contains("visible")?"HIDE DEBUG":"SHOW DEBUG";updateDebugPanel();});
+// First user interaction unlocks audio
+document.addEventListener("click",()=>{unlockAudio();},{once:true});
+document.addEventListener("keydown",()=>{unlockAudio();},{once:true});
 
 /* ---------- boot sequence ---------- */
 const BOOT=[
@@ -717,7 +784,7 @@ function runBoot(){
         $("#boot").classList.add("gone");
         setTimeout(()=>$("#boot").remove(),700);
         log("ok","[SYS]","ADA core online · all subsystems nominal");
-        log("sys","[SYS]","type HELP or press V for voice link");
+        log("sys","[SYS]","type HELP or press V for voice link · D for TTS debug");
         addContact(CITIES[0],true);addContact(CITIES[2],true);addContact(CITIES[4],true);
         pushThreat(THREATS[2]);
       },420);
@@ -741,20 +808,23 @@ function frame(now){
 }
 window.addEventListener("resize",()=>{sizeMap();sizeWave();});
 
-// voice loading
+// voice loading with robust fallback
 if("speechSynthesis" in window){
   speechSynthesis.onvoiceschanged = () => { 
     voicesReady = true; 
     console.log("Voices loaded:", speechSynthesis.getVoices().length);
+    updateDebugPanel();
   };
   speechSynthesis.getVoices(); // trigger load
-  // Fallback: check again after 2s
   setTimeout(() => {
     if(!voicesReady && speechSynthesis.getVoices().length){
       voicesReady = true;
       console.log("Voices loaded (timeout):", speechSynthesis.getVoices().length);
+      updateDebugPanel();
     }
   }, 2000);
+  // Periodic debug panel update
+  setInterval(updateDebugPanel, 1000);
 }
 
 buildGauges();
