@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADA — Command Center</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='10' fill='none' stroke='%2335e0ff' stroke-width='3'/><circle cx='16' cy='16' r='3' fill='%2335e0ff'/></svg>">
+<style>
+:root{
+  --bg:#04070b;
+  --panel:#080d14;
+  --panel-2:#0a1019;
+  --line:#12202e;
+  --line-bright:#1b3348;
+  --ink:#c9d7e6;
+  --muted:#54687c;
+  --dim:#33465a;
+  --cyan:#35e0ff;
+  --cyan-dim:rgba(53,224,255,.14);
+  --amber:#ffb454;
+  --red:#ff4d5e;
+  --green:#3ddc84;
+  --mono:ui-monospace,"Cascadia Code","JetBrains Mono","Fira Code",Consolas,"SF Mono",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:13px;
+  overflow:hidden;
+}
+body::after{ /* scanlines */
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:90;
+  background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(0,0,0,.14) 2px 4px);
+  mix-blend-mode:multiply;
+}
+body::before{ /* vignette */
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:89;
+  background:radial-gradient(ellipse at 50% 45%,transparent 55%,rgba(0,0,0,.5) 100%);
+}
+::selection{background:var(--cyan-dim);color:var(--cyan)}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-thumb{background:var(--line-bright);border-radius:3px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- layout ---------- */
+#app{
+  display:grid;height:100vh;padding:10px;gap:10px;
+  grid-template-rows:44px 1fr 210px;
+  grid-template-columns:272px 1fr 316px;
+  grid-template-areas:
+    "top top top"
+    "left center right"
+    "term term term";
+}
+.panel{
+  background:linear-gradient(180deg,var(--panel) 0%,var(--panel-2) 100%);
+  border:1px solid var(--line);
+  border-radius:6px;
+  position:relative;
+  display:flex;flex-direction:column;
+  min-height:0;
+}
+.panel::before,.panel::after{ /* corner ticks */
+  content:"";position:absolute;width:10px;height:10px;pointer-events:none;
+  border-color:var(--line-bright);border-style:solid;
+}
+.panel::before{top:-1px;left:-1px;border-width:1px 0 0 1px}
+.panel::after{bottom:-1px;right:-1px;border-width:0 1px 1px 0}
+.p-head{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 12px;border-bottom:1px solid var(--line);
+  font-size:10px;letter-spacing:.22em;color:var(--muted);
+  text-transform:uppercase;flex:0 0 auto;
+}
+.p-head .dot{width:5px;height:5px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan);animation:pulse 2.4s infinite}
+.p-head .spacer{flex:1}
+.p-body{flex:1;min-height:0;padding:10px 12px;overflow:hidden;display:flex;flex-direction:column}
+
+/* ---------- top bar ---------- */
+#topbar{grid-area:top;flex-direction:row;align-items:center;padding:0 14px;gap:16px}
+#logo{display:flex;align-items:center;gap:10px}
+#logo svg{width:26px;height:26px}
+#logo .name{font-size:17px;letter-spacing:.42em;color:var(--cyan);font-weight:700;text-shadow:0 0 14px rgba(53,224,255,.5)}
+#logo .sub{font-size:9px;letter-spacing:.18em;color:var(--muted);margin-top:3px}
+#top-status{display:flex;gap:14px;align-items:center;font-size:10px;letter-spacing:.12em;color:var(--muted)}
+#top-status b{color:var(--ink);font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-bright);border-radius:3px;padding:3px 8px;font-size:9px;letter-spacing:.16em}
+.chip .led{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+#clockbox{margin-left:auto;text-align:right}
+#clock{font-size:19px;color:var(--ink);letter-spacing:.14em;font-variant-numeric:tabular-nums}
+#dateline{font-size:9px;color:var(--muted);letter-spacing:.2em}
+
+/* ---------- left: gauges ---------- */
+#left{grid-area:left}
+#gauges{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.gauge{border:1px solid var(--line);border-radius:5px;padding:6px 4px 2px;text-align:center;background:rgba(255,255,255,.012)}
+.gauge svg{width:100%;height:auto;display:block}
+.gauge .g-val{font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums}
+.gauge .g-lab{font-size:8px;letter-spacing:.24em;color:var(--muted);margin-top:1px;padding-bottom:3px}
+#subsys{margin-top:10px;display:flex;flex-direction:column;gap:5px;font-size:10.5px}
+.sys-row{display:flex;align-items:center;gap:8px;padding:4px 6px;border:1px solid transparent;border-radius:3px}
+.sys-row:hover{border-color:var(--line);background:rgba(53,224,255,.03)}
+.sys-row .led{width:6px;height:6px;border-radius:50%;flex:0 0 auto}
+.sys-row .led.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+.sys-row .led.warn{background:var(--amber);box-shadow:0 0 5px var(--amber)}
+.sys-row .nm{color:var(--ink);letter-spacing:.06em}
+.sys-row .st{margin-left:auto;color:var(--muted);font-size:9px;letter-spacing:.1em}
+
+/* ---------- center: map ---------- */
+#center{grid-area:center}
+#mapwrap{flex:1;position:relative;min-height:0}
+#map{position:absolute;inset:0;width:100%;height:100%}
+#map-hud{position:absolute;inset:0;pointer-events:none;font-size:9px;letter-spacing:.14em;color:var(--muted)}
+#map-hud .tl{position:absolute;top:8px;left:10px}
+#map-hud .tr{position:absolute;top:8px;right:10px;text-align:right}
+#map-hud .bl{position:absolute;bottom:8px;left:10px}
+#map-hud .br{position:absolute;bottom:8px;right:10px;text-align:right}
+#map-hud b{color:var(--cyan);font-weight:600}
+#mapstrip{flex:0 0 auto;display:flex;gap:18px;padding:7px 12px;border-top:1px solid var(--line);font-size:9.5px;letter-spacing:.12em;color:var(--muted)}
+#mapstrip b{color:var(--ink);font-variant-numeric:tabular-nums}
+#mapstrip .alert b{color:var(--amber)}
+
+/* ---------- right: threats + comms ---------- */
+#right{grid-area:right;gap:10px}
+#right{display:flex;flex-direction:column}
+#threat-panel{flex:1.35}
+#comms-panel{flex:1}
+#threats{overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.threat{border:1px solid var(--line);border-left:2px solid var(--dim);border-radius:3px;padding:6px 8px;font-size:10.5px;background:rgba(255,255,255,.012);animation:slidein .3s ease}
+.threat .t-top{display:flex;gap:8px;align-items:center;margin-bottom:3px}
+.threat .sev{font-size:8px;letter-spacing:.18em;padding:1px 5px;border-radius:2px}
+.threat .tm{margin-left:auto;color:var(--dim);font-size:9px;font-variant-numeric:tabular-nums}
+.threat .msg{color:var(--ink);line-height:1.45}
+.threat .src{color:var(--muted);font-size:9px;letter-spacing:.08em;margin-top:2px}
+.sev.low{color:var(--green);border:1px solid rgba(61,220,132,.35)}
+.sev.elevated{color:var(--cyan);border:1px solid rgba(53,224,255,.35)}
+.sev.moderate{color:var(--amber);border:1px solid rgba(255,180,84,.4)}
+.sev.high{color:var(--red);border:1px solid rgba(255,77,94,.45)}
+.threat.t-moderate{border-left-color:var(--amber)}
+.threat.t-high{border-left-color:var(--red)}
+.threat.t-elevated{border-left-color:var(--cyan)}
+.threat.t-low{border-left-color:var(--green)}
+#wave{width:100%;height:56px;display:block;flex:0 0 auto}
+#comms-status{font-size:10px;color:var(--muted);letter-spacing:.1em;margin-top:6px;display:flex;align-items:center;gap:8px}
+#comms-status b{color:var(--cyan)}
+#voice-btn{
+  margin-top:8px;flex:0 0 auto;width:100%;padding:9px;
+  background:var(--cyan-dim);border:1px solid rgba(53,224,255,.4);color:var(--cyan);
+  font-family:var(--mono);font-size:10px;letter-spacing:.26em;border-radius:4px;cursor:pointer;
+  transition:background .15s,box-shadow .15s;text-transform:uppercase;
+}
+#voice-btn:hover{background:rgba(53,224,255,.22);box-shadow:0 0 16px rgba(53,224,255,.25)}
+#voice-btn.listening{background:rgba(255,77,94,.15);border-color:var(--red);color:var(--red);animation:pulse 1s infinite}
+
+/* ---------- terminal ---------- */
+#term{grid-area:term}
+#term .p-body{padding:0}
+#term-out{flex:1;overflow-y:auto;padding:8px 12px;font-size:11px;line-height:1.65}
+.ln{white-space:pre-wrap;word-break:break-word}
+.ln .ts{color:var(--dim)}
+.ln .tag{font-weight:600}
+.ln.info .tag{color:var(--cyan)}
+.ln.ok .tag{color:var(--green)}
+.ln.warn .tag{color:var(--amber)}
+.ln.err .tag{color:var(--red)}
+.ln.sys .tag{color:var(--muted)}
+.ln.user .tag{color:var(--ink)}
+.ln .txt{color:var(--ink)}
+.ln.sys .txt{color:var(--muted)}
+#cmdrow{flex:0 0 auto;display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding:7px 12px}
+#cmdrow .ps1{color:var(--cyan);font-size:11px;letter-spacing:.1em}
+#cmd{flex:1;background:transparent;border:none;outline:none;color:var(--ink);font-family:var(--mono);font-size:12px;caret-color:var(--cyan)}
+#cmd::placeholder{color:var(--dim)}
+.kbd-hint{font-size:8.5px;color:var(--dim);letter-spacing:.12em}
+.kbd-hint b{color:var(--muted);border:1px solid var(--line-bright);border-radius:2px;padding:0 4px;font-weight:400}
+
+/* ---------- boot overlay ---------- */
+#boot{
+  position:fixed;inset:0;background:var(--bg);z-index:200;
+  display:flex;align-items:center;justify-content:center;
+  transition:opacity .6s ease;
+}
+#boot.gone{opacity:0;pointer-events:none}
+#boot-inner{width:min(560px,86vw);font-size:12.5px;line-height:2}
+#boot-inner .b-title{color:var(--cyan);letter-spacing:.5em;font-size:20px;margin-bottom:14px;text-shadow:0 0 18px rgba(53,224,255,.55)}
+#boot-inner .b-line{color:var(--muted);white-space:pre}
+#boot-inner .b-line b{color:var(--green);font-weight:600}
+#boot-inner .b-line.u b{color:var(--ink)}
+.cursor{display:inline-block;width:7px;height:13px;background:var(--cyan);vertical-align:-2px;animation:blink .8s steps(1) infinite}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes slidein{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+}
+@media (max-width:1100px){
+  body{overflow:auto}
+  #app{height:auto;grid-template-columns:1fr;grid-template-rows:auto;
+    grid-template-areas:"top" "center" "left" "right" "term";}
+  #center{min-height:380px}
+  #term{min-height:260px}
+  #topbar{flex-wrap:wrap;height:auto;padding:8px 14px}
+}
+</style>
+</head>
+<body>
+
+<div id="boot"><div id="boot-inner">
+  <div class="b-title">A D A</div>
+  <div id="boot-lines"></div>
+</div></div>
+
+<div id="app">
+
+  <!-- TOP BAR -->
+  <header id="topbar" class="panel">
+    <div id="logo">
+      <svg viewBox="0 0 32 32" fill="none">
+        <circle cx="16" cy="16" r="13" stroke="#35e0ff" stroke-width="1" opacity=".4"/>
+        <circle cx="16" cy="16" r="9" stroke="#35e0ff" stroke-width="1.6"/>
+        <circle cx="16" cy="16" r="2.6" fill="#35e0ff"/>
+        <path d="M16 3v5M16 24v5M3 16h5M24 16h5" stroke="#35e0ff" stroke-width="1" opacity=".6"/>
+      </svg>
+      <div>
+        <div class="name">ADA</div>
+        <div class="sub">AUTONOMOUS DIGITAL ASSISTANT</div>
+      </div>
+    </div>
+    <div id="top-status">
+      <span class="chip"><span class="led"></span>CORE ONLINE</span>
+      <span class="chip" id="uplink-chip"><span class="led" style="background:var(--cyan);box-shadow:0 0 6px var(--cyan)"></span>UPLINK SECURE</span>
+      <span>UPTIME <b id="uptime">00:00:00</b></span>
+      <span>OP <b>SAKET</b></span>
+    </div>
+    <div id="clockbox">
+      <div id="clock">--:--:--</div>
+      <div id="dateline">LOADING…</div>
+    </div>
+  </header>
+
+  <!-- LEFT: SYSTEM -->
+  <aside id="left" class="panel">
+    <div class="p-head"><span class="dot"></span>SYSTEM DIAGNOSTICS<span class="spacer"></span><span id="diag-tick">LIVE</span></div>
+    <div class="p-body">
+      <div id="gauges"></div>
+      <div id="subsys"></div>
+    </div>
+  </aside>
+
+  <!-- CENTER: MAP -->
+  <main id="center" class="panel">
+    <div class="p-head"><span class="dot"></span>GLOBAL SURVEILLANCE GRID<span class="spacer"></span><span id="sweep-state">SWEEP ACTIVE</span></div>
+    <div class="p-body" style="padding:8px">
+      <div id="mapwrap">
+        <canvas id="map"></canvas>
+        <div id="map-hud">
+          <div class="tl">PROJ: EQUIRECTANGULAR<br>GRID: 96 × 48</div>
+          <div class="tr">MODE: <b>PASSIVE SCAN</b><br>REFRESH: 60 Hz</div>
+          <div class="bl" id="hud-contact">CONTACTS: <b>0</b></div>
+          <div class="br" id="hud-sweep">BEAM: 000°</div>
+        </div>
+      </div>
+      <div id="mapstrip">
+        <span>NODES <b id="st-nodes">14</b></span>
+        <span>PACKETS <b id="st-packets">0</b></span>
+        <span>LATENCY <b id="st-lat">-- ms</b></span>
+        <span class="alert">ALERTS <b id="st-alerts">0</b></span>
+        <span style="margin-left:auto">SAT-LINK <b>4/4</b></span>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT: THREATS + COMMS -->
+  <aside id="right">
+    <section id="threat-panel" class="panel">
+      <div class="p-head"><span class="dot" style="background:var(--amber);box-shadow:0 0 6px var(--amber)"></span>THREAT FEED<span class="spacer"></span><span id="threat-count">0 EVENTS</span></div>
+      <div class="p-body"><div id="threats"></div></div>
+    </section>
+    <section id="comms-panel" class="panel">
+      <div class="p-head"><span class="dot"></span>COMMS / VOICE MATRIX</div>
+      <div class="p-body">
+        <canvas id="wave"></canvas>
+        <div id="comms-status">CHANNEL: <b id="comms-mode">STANDBY</b><span style="margin-left:auto" id="tts-state">TTS ON</span></div>
+        <button id="voice-btn">▸ Activate Voice Link</button>
+      </div>
+    </section>
+  </aside>
+
+  <!-- TERMINAL -->
+  <section id="term" class="panel">
+    <div class="p-head"><span class="dot"></span>SYSTEM TERMINAL<span class="spacer"></span><span class="kbd-hint"><b>V</b> voice&nbsp; <b>S</b> scan&nbsp; <b>M</b> mute&nbsp; <b>HELP</b> commands</span></div>
+    <div class="p-body">
+      <div id="term-out"></div>
+      <div id="cmdrow">
+        <span class="ps1">ada@core:~$</span>
+        <input id="cmd" type="text" placeholder="type a command… (try: status, scan, threat report, help)" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   ADA — Autonomous Digital Assistant · Command Center
+   Single-file, zero dependencies. Voice via Web Speech API.
+   ============================================================ */
+
+/* ---------- world dot-matrix (Natural Earth 110m land, 96x48) ---------- */
+const MAP_GRID=[
+"000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+"000000000000000000000000001111100000111111000000000000000000000000000000000000000000000000000000",
+"000000000000000000001011111111111111111111111000000111100000110000000000111000000000000000000000",
+"000000000000000111111111111111111111111111100000000111000000000111000001111111000000111100000000",
+"000000000000001111111111111100000111111111100000000000000000001100111111111111111110111100000000",
+"100111111111111111111111111111100111111111000000000011111100011111111111111111111111111111111111",
+"111111111111111111111111111111110111111001111000000111111111111111111111111111111111111111111111",
+"001111111111111111111111011111100011100000000000011111111111111111111111111111111111111111111111",
+"000011110001111111111111000111110000000000000011011110111111111111111111111111111111111111110000",
+"000011000000111111111111111111111000000000000111011111111111111111111111111111111111110001100000",
+"000000000000011111111111111111111100000000000011111111111111111111111111111111111111111000000000",
+"000000000000001111111111111111111100000000000001111111111111111111111111111111111111111000000000",
+"000000000000001111111111111111100000000000000111111111110111111111111111111111111111011000000000",
+"000000000000000111111111111110000000000000000111101111111111111111111111111111111110010000000000",
+"000000000000000111111111111100000000000000000011111000111111111111111111111111111111110000000000",
+"000000000000000011111111111000000000000000000111111111111111111111111111111111111011000000000000",
+"000000000000000001111111011000000000000000001111111111111111111111111111111111111000000000000000",
+"000000000000000000111100001100000000000000011111111111111111111111111111111111111000000000000000",
+"000001100000000000001111101111000000000000011111111111111111111100111111111111000000000000000000",
+"000000000000000000001111110111000000000000011111111111111111111000011100011110001000000000000000",
+"000000000000000000000001110010000000000000011111111111111111110000001100001111001100000000000000",
+"000000000000000000000000011111110000000000001111111111111111110000001100001110011100000000000000",
+"000000000000000000000000000111111100000000000111111111111111100000000100011100110100000000000000",
+"000000000000000000000000000111111110000000000000001111111111000000000000001101111010000000000000",
+"000000000000000000000000001111111111100000000000001111111110000000000000001101111011110010000000",
+"000000000000000000000000001111111111111000000000000111111110000000000000000111001001111111000000",
+"000000000000000000000000000111111111111000000000000111111110000000000000000001111100011100110000",
+"000000000000000000000000000111111111110000000000000111111110010000000000000000000111111000000000",
+"000000000000000000000000000011111111110000000000000111111111110000000000000000001111111000001001",
+"000000000000000000000000000001111111110000000000000111111101100000000000000000111111111100001000",
+"000000000000000000000000000001111111100000000000000111111101100000000000000000111111111110000000",
+"000000000000000000000000000001111110000000000000000011111000000000000000000000111111111110000000",
+"000000000000000000000000000011111110000000000000000011110000000000000000000000111111111110000000",
+"000000000000000000000000000011111100000000000000000001100000000000000000000000011000111110000010",
+"000000000000000000000000000011111000000000000000000000000000000000000000000000000000001100000011",
+"000000000000000000000000000011100000000000000000000000000000000000000000000000000000001100000110",
+"000000000000000000000000000011100000000000000000000000000000000000000000000000000000000000001100",
+"000000000000000000000000000011001000000000000000000000000000000000100000000000000000000000000000",
+"000000000000000000000000000011000000000000000000000000000000000000000000000000000000000000000000",
+"000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+"000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+"000000000000000000000000000000110000000000000000000000000000011100000011111111111111111000000000",
+"000000000000000000000000000011110000000000000000011111111111111111111111111111111111111111111000",
+"000000000001111111101111111111110000000000011111111111111111111111111111111111111111111111111100",
+"000001111111111111111111111111100001000111111111111111111111111111111111111111111111111111110000",
+"000000111111111111111111111111110111111111111111111111111111111111111111111111111111111111110000",
+"111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+"111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"];
+const MAP_COLS=96, MAP_ROWS=48;
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const ri=(a,b)=>Math.floor(rnd(a,b+1));
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const pad=n=>String(n).padStart(2,"0");
+const T0=Date.now();
+function istTime(d=new Date()){return d.toLocaleTimeString("en-IN",{timeZone:"Asia/Kolkata",hour12:false});}
+function istDate(d=new Date()){return d.toLocaleDateString("en-IN",{timeZone:"Asia/Kolkata",weekday:"short",day:"2-digit",month:"short",year:"numeric"}).toUpperCase();}
+
+/* ---------- terminal ---------- */
+const termOut=$("#term-out");
+function log(level,tag,text){
+  const ln=document.createElement("div");
+  ln.className="ln "+level;
+  const t=document.createElement("span");t.className="ts";t.textContent="["+istTime()+"] ";
+  const g=document.createElement("span");g.className="tag";g.textContent=tag+" ";
+  const x=document.createElement("span");x.className="txt";x.textContent=text;
+  ln.append(t,g,x);
+  termOut.appendChild(ln);
+  while(termOut.children.length>220)termOut.removeChild(termOut.firstChild);
+  termOut.scrollTop=termOut.scrollHeight;
+}
+
+/* ---------- clock / uptime ---------- */
+setInterval(()=>{
+  $("#clock").textContent=istTime();
+  $("#dateline").textContent=istDate()+" · IST";
+  const s=Math.floor((Date.now()-T0)/1000);
+  $("#uptime").textContent=pad(Math.floor(s/3600))+":"+pad(Math.floor(s/60)%60)+":"+pad(s%60);
+},500);
+
+/* ---------- gauges ---------- */
+const GAUGES=[
+  {id:"cpu",label:"CPU LOAD",val:34,min:8,max:96,warn:80},
+  {id:"mem",label:"MEMORY",val:52,min:30,max:88,warn:85},
+  {id:"net",label:"NET I/O",val:23,min:2,max:99,warn:90},
+  {id:"pwr",label:"PWR CELL",val:94,min:70,max:100,warn:0,warnBelow:25},
+];
+function buildGauges(){
+  const wrap=$("#gauges");
+  GAUGES.forEach(g=>{
+    const d=document.createElement("div");d.className="gauge";d.id="g-"+g.id;
+    d.innerHTML=`
+      <svg viewBox="0 0 100 62">
+        <path d="M10 56 A40 40 0 0 1 90 56" fill="none" stroke="#12202e" stroke-width="6" stroke-linecap="round"/>
+        <path class="arc" d="M10 56 A40 40 0 0 1 90 56" fill="none" stroke="#35e0ff" stroke-width="6" stroke-linecap="round"
+          stroke-dasharray="125.6" stroke-dashoffset="125.6" style="transition:stroke-dashoffset .5s ease,stroke .3s"/>
+        <text class="val" x="50" y="48" text-anchor="middle" fill="#c9d7e6" font-size="17" font-family="inherit">--</text>
+        <text x="50" y="59" text-anchor="middle" fill="#54687c" font-size="6.5" letter-spacing="2">%</text>
+      </svg>
+      <div class="g-lab">${g.label}</div>`;
+    wrap.appendChild(d);
+    g.elArc=d.querySelector(".arc");g.elVal=d.querySelector(".val");g.target=g.val;
+  });
+}
+function tickGauges(){
+  GAUGES.forEach(g=>{
+    if(Math.random()<.18)g.target=Math.max(g.min,Math.min(g.max,g.target+rnd(-22,22)));
+    g.val+=(g.target-g.val)*.08;
+    const v=Math.round(g.val);
+    g.elVal.textContent=v;
+    g.elArc.style.strokeDashoffset=125.6*(1-v/100);
+    const bad=g.warnBelow?v<g.warnBelow:v>g.warn;
+    g.elArc.style.stroke=bad?"var(--red)":"#35e0ff";
+  });
+}
+
+/* ---------- subsystems ---------- */
+const SUBSYS=[
+  ["NEURAL CORE","ok","NOMINAL"],
+  ["SENSOR GRID","ok","14/14"],
+  ["VOICE MATRIX","ok","READY"],
+  ["CRYPTO LAYER","ok","AES-256"],
+  ["SAT UPLINK","ok","4 LOCKED"],
+  ["THERMAL","warn","+6.2°C"],
+  ["DRONE BAY","ok","STANDBY"],
+  ["BACKUP CELL","ok","FLOAT"],
+];
+function buildSubsys(){
+  const w=$("#subsys");
+  SUBSYS.forEach(([nm,st,v])=>{
+    const r=document.createElement("div");r.className="sys-row";
+    r.innerHTML=`<span class="led ${st}"></span><span class="nm">${nm}</span><span class="st">${v}</span>`;
+    w.appendChild(r);
+  });
+}
+
+/* ---------- map ---------- */
+const mapCv=$("#map"),mctx=mapCv.getContext("2d");
+let landCv=null,sweepAng=0,contacts=[],packets=0,alerts=0;
+const CITIES=[
+  ["DELHI",77.21,28.61],["MUMBAI",72.88,19.08],["LONDON",-0.13,51.51],
+  ["NEW YORK",-74.01,40.71],["TOKYO",139.69,35.69],["SÃO PAULO",-46.63,-23.55],
+  ["SYDNEY",151.21,-33.87],["CAIRO",31.24,30.04],["MOSCOW",37.62,55.76],
+  ["SINGAPORE",103.82,1.35],["SAN FRANCISCO",-122.42,37.77],["BERLIN",13.40,52.52],
+  ["NAIROBI",36.82,-1.29],["REYKJAVIK",-21.94,64.15],
+];
+function proj(lon,lat,W,H){return[(lon+180)/360*W,(90-lat)/180*H];}
+function sizeMap(){
+  const r=mapCv.parentElement.getBoundingClientRect();
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  mapCv.width=r.width*dpr;mapCv.height=r.height*dpr;
+  mctx.setTransform(dpr,0,0,dpr,0,0);
+  renderLand(r.width,r.height);
+}
+function renderLand(W,H){
+  landCv=document.createElement("canvas");landCv.width=W;landCv.height=H;
+  const c=landCv.getContext("2d");
+  const cw=W/MAP_COLS,ch=H/MAP_ROWS,rad=Math.min(cw,ch)*.30;
+  c.fillStyle="#173247";
+  for(let r=0;r<MAP_ROWS;r++)for(let col=0;col<MAP_COLS;col++){
+    if(MAP_GRID[r][col]==="1"){
+      c.beginPath();c.arc(col*cw+cw/2,r*ch+ch/2,rad,0,7);c.fill();
+    }
+  }
+  // faint graticule
+  c.strokeStyle="rgba(53,224,255,.05)";c.lineWidth=1;
+  for(let i=1;i<12;i++){c.beginPath();c.moveTo(i*W/12,0);c.lineTo(i*W/12,H);c.stroke();}
+  for(let i=1;i<6;i++){c.beginPath();c.moveTo(0,i*H/6);c.lineTo(W,i*H/6);c.stroke();}
+}
+function addContact(city,silent){
+  const[name,lon,lat]=city;
+  contacts.push({name,lon,lat,born:performance.now(),life:rnd(9000,16000)});
+  if(contacts.length>8)contacts.shift();
+  if(!silent){
+    packets+=ri(40,400);
+    log("info","[GRID]","contact acquired: "+name+" · "+lat.toFixed(2)+"°N "+Math.abs(lon).toFixed(2)+"°"+(lon<0?"W":"E"));
+  }
+}
+function drawMap(now){
+  const W=mapCv.clientWidth,H=mapCv.clientHeight;
+  if(!W||!landCv)return;
+  mctx.clearRect(0,0,W,H);
+  mctx.drawImage(landCv,0,0);
+  const cx=W/2,cy=H/2,R=Math.hypot(W,H)/2;
+  // radar sweep with fading trail
+  sweepAng=(now/2600)%(Math.PI*2);
+  for(let i=34;i>=0;i--){
+    const a=sweepAng-i*.022,al=(1-i/34)*.16;
+    mctx.strokeStyle=`rgba(53,224,255,${al})`;
+    mctx.lineWidth=i===0?1.6:1;
+    mctx.beginPath();mctx.moveTo(cx,cy);
+    mctx.lineTo(cx+Math.cos(a)*R,cy+Math.sin(a)*R);mctx.stroke();
+  }
+  // center reticle
+  mctx.strokeStyle="rgba(53,224,255,.35)";mctx.lineWidth=1;
+  mctx.beginPath();mctx.arc(cx,cy,14,0,7);mctx.stroke();
+  mctx.beginPath();mctx.moveTo(cx-22,cy);mctx.lineTo(cx-8,cy);mctx.moveTo(cx+8,cy);mctx.lineTo(cx+22,cy);
+  mctx.moveTo(cx,cy-22);mctx.lineTo(cx,cy-8);mctx.moveTo(cx,cy+8);mctx.lineTo(cx,cy+22);mctx.stroke();
+  // contacts
+  contacts=contacts.filter(c=>now-c.born<c.life);
+  contacts.forEach(c=>{
+    const[x,y]=proj(c.lon,c.lat,W,H);
+    const t=(now-c.born)/1000;
+    const ring=(t%1.6)/1.6;
+    mctx.strokeStyle=`rgba(255,180,84,${(1-ring)*.8})`;
+    mctx.beginPath();mctx.arc(x,y,3+ring*16,0,7);mctx.stroke();
+    mctx.fillStyle="#ffb454";
+    mctx.beginPath();mctx.arc(x,y,2.4,0,7);mctx.fill();
+    mctx.fillStyle="rgba(201,215,230,.85)";
+    mctx.font="8px ui-monospace,monospace";
+    mctx.fillText(c.name,x+7,y+3);
+  });
+  $("#hud-contact").innerHTML="CONTACTS: <b>"+contacts.length+"</b>";
+  $("#hud-sweep").textContent="BEAM: "+pad(Math.round(sweepAng*180/Math.PI)%360)+"°";
+}
+
+/* ---------- threat feed ---------- */
+const THREATS=[
+  ["low","Port scan deflected","EDGE / GW-02"],
+  ["low","Expired cert rotated","PKI / INTERNAL"],
+  ["elevated","Anomalous traffic spike","NODE DEL-01"],
+  ["elevated","New device fingerprint","AUTH / PERIMETER"],
+  ["moderate","Brute-force attempt blocked","SSH / BASTION"],
+  ["moderate","Unusual outbound payload","DLP / EGRESS"],
+  ["high","Signature match: known C2","THREAT-INTEL"],
+];
+let threatN=0;
+function pushThreat(item){
+  const[sev,msg,src]=item||pick(THREATS);
+  const el=document.createElement("div");
+  el.className="threat t-"+sev;
+  el.innerHTML=`<div class="t-top"><span class="sev ${sev}">${sev.toUpperCase()}</span><span class="tm">${istTime()}</span></div>
+    <div class="msg">${msg}</div><div class="src">SRC: ${src}</div>`;
+  const box=$("#threats");
+  box.prepend(el);
+  while(box.children.length>9)box.removeChild(box.lastChild);
+  threatN++;alerts+=sev==="high"?1:0;
+  $("#threat-count").textContent=threatN+" EVENTS";
+  $("#st-alerts").textContent=alerts;
+  if(sev==="high")log("err","[ALERT]",msg+" — "+src);
+  else if(sev==="moderate")log("warn","[FEED]",msg+" — "+src);
+}
+
+/* ---------- ambient log stream ---------- */
+const LOG_POOL=[
+  ["sys","[SYS]","heartbeat ok · all subsystems nominal"],
+  ["info","[NET]","packet burst routed via sat-link 3 · %d ms"],
+  ["ok","[BUILD]","compile pass %d/%d · 0 errors, %d warnings"],
+  ["info","[SCAN]","sector %d sweep complete · no anomalies"],
+  ["sys","[MEM]","garbage collection · freed %d MB"],
+  ["info","[CRYPTO]","session keys rotated · cipher AES-256-GCM"],
+  ["ok","[SYNC]","node %s synced · delta %d KB"],
+  ["info","[SENSOR]","thermal drift +%.1f°C · within tolerance"],
+  ["sys","[AI]","inference cycle %d · latency %d ms"],
+];
+function ambientLog(){
+  const[lv,tag,tpl]=pick(LOG_POOL);
+  const txt=tpl.replace(/%d/g,()=>ri(2,940)).replace(/%s/g,()=>pick(["DEL-01","LON-04","TYO-02","NYC-07","BER-03"])).replace(/%.1f/g,()=>rnd(.2,4.8).toFixed(1));
+  log(lv,tag,txt);
+  packets+=ri(10,260);
+  $("#st-packets").textContent=packets.toLocaleString("en-IN");
+  $("#st-lat").textContent=ri(9,84)+" ms";
+}
+
+/* ---------- voice ---------- */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let recog=null,listening=false,ttsOn=true,speaking=false;
+const waveCv=$("#wave"),wctx=waveCv.getContext("2d");
+function sizeWave(){
+  const r=waveCv.getBoundingClientRect();
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  waveCv.width=r.width*dpr;waveCv.height=r.height*dpr;
+  wctx.setTransform(dpr,0,0,dpr,0,0);
+}
+function drawWave(now){
+  const W=waveCv.clientWidth,H=waveCv.clientHeight;
+  if(!W)return;
+  wctx.clearRect(0,0,W,H);
+  const active=listening||speaking;
+  const N=42,bw=W/N;
+  for(let i=0;i<N;i++){
+    const env=Math.sin(i/N*Math.PI);
+    const amp=active?(.25+.75*Math.abs(Math.sin(now/130+i*.55))*Math.random()*.9+.1):.06+.04*Math.sin(now/600+i);
+    const h=Math.max(2,env*amp*H*.9);
+    wctx.fillStyle=active?(listening?"rgba(255,77,94,.9)":"rgba(53,224,255,.9)"):"rgba(84,104,124,.5)";
+    wctx.fillRect(i*bw+1,(H-h)/2,bw-2,h);
+  }
+}
+function speak(text){
+  if(!ttsOn||!("speechSynthesis" in window))return;
+  const u=new SpeechSynthesisUtterance(text);
+  u.rate=1.04;u.pitch=1;
+  const vs=speechSynthesis.getVoices();
+  const v=vs.find(v=>/en[-_](IN|GB)/i.test(v.lang)&&/female|zira|heera|neerja|sonia|libby/i.test(v.name))||vs.find(v=>/^en/i.test(v.lang));
+  if(v)u.voice=v;
+  u.onstart=()=>{speaking=true;$("#comms-mode").textContent="RESPONDING";};
+  u.onend=()=>{speaking=false;$("#comms-mode").textContent=listening?"LISTENING":"STANDBY";};
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+}
+function respond(text,sayIt=true){
+  log("ok","[ADA]",text);
+  if(sayIt)speak(text);
+}
+function handleCommand(raw){
+  const q=raw.trim().toLowerCase().replace(/^(hey |ok |okay )?(ada|jarvis|friday)[, ]*/,"");
+  if(!q)return;
+  log("user","[OP]",raw.trim());
+  if(/^(help|commands)/.test(q)){
+    respond("Available commands: status, scan, threat report, time, gauges, clear, mute, speak. Say ADA followed by any command.");
+  }else if(/status|report|diagnostic/.test(q)){
+    const cpu=Math.round(GAUGES[0].val),mem=Math.round(GAUGES[1].val),pwr=Math.round(GAUGES[3].val);
+    respond(`All systems operational. CPU at ${cpu} percent, memory at ${mem} percent, power cell at ${pwr} percent. ${contacts.length} active contacts on the grid. Uplink is secure.`);
+  }else if(/scan|sweep/.test(q)){
+    runScan();
+  }else if(/threat|alert/.test(q)){
+    const hi=threatN;
+    respond(`Threat summary: ${hi} events logged this session, ${alerts} high priority. Perimeter defenses holding. No active breaches detected.`);
+  }else if(/time|clock/.test(q)){
+    const t=istTime();
+    respond(`It is ${t.split(":").slice(0,2).join(" past ")} minutes, Indian Standard Time.`);
+  }else if(/gauge|power|cpu|memory/.test(q)){
+    respond(`Diagnostics: CPU ${Math.round(GAUGES[0].val)} percent, memory ${Math.round(GAUGES[1].val)} percent, network ${Math.round(GAUGES[2].val)} percent, power ${Math.round(GAUGES[3].val)} percent.`);
+  }else if(/clear|reset terminal/.test(q)){
+    termOut.innerHTML="";respond("Terminal cleared.",false);
+  }else if(/mute|quiet|silence/.test(q)){
+    ttsOn=false;speak("");$("#tts-state").textContent="TTS OFF";log("sys","[SYS]","voice output muted");
+  }else if(/speak|voice on|unmute/.test(q)){
+    ttsOn=true;$("#tts-state").textContent="TTS ON";respond("Voice output enabled.");
+  }else if(/hello|hi |hey|^hi$/.test(q)){
+    respond("Hello Saket. All systems are online and at your disposal.");
+  }else if(/who are you|your name/.test(q)){
+    respond("I am ADA, your Autonomous Digital Assistant. Named for Ada Lovelace, the first programmer.");
+  }else if(/thank/.test(q)){
+    respond("Always a pleasure, Saket.");
+  }else{
+    respond("Command not recognized. Say help for the list of available commands.");
+  }
+}
+function runScan(){
+  respond("Initiating deep sweep of all sectors.",false);
+  log("info","[SCAN]","deep sweep initiated · 4 sectors queued");
+  let i=0;
+  const iv=setInterval(()=>{
+    i++;
+    addContact(pick(CITIES));
+    if(Math.random()<.4)pushThreat();
+    if(i>=3){clearInterval(iv);log("ok","[SCAN]","sweep complete · grid updated");respond("Sweep complete. "+contacts.length+" contacts now tracked on the grid.");}
+  },900);
+}
+function toggleVoice(){
+  if(!SR){log("warn","[SYS]","speech recognition not supported in this browser — text commands still work");return;}
+  if(listening){recog.stop();return;}
+  recog=new SR();
+  recog.lang="en-IN";recog.interimResults=false;recog.maxAlternatives=1;
+  recog.onstart=()=>{listening=true;$("#voice-btn").classList.add("listening");$("#voice-btn").textContent="■ Listening…";$("#comms-mode").textContent="LISTENING";log("sys","[SYS]","voice link open — speak now");};
+  recog.onresult=e=>{handleCommand(e.results[0][0].transcript);};
+  recog.onerror=e=>{if(e.error!=="no-speech")log("warn","[SYS]","voice link error: "+e.error);};
+  recog.onend=()=>{listening=false;$("#voice-btn").classList.remove("listening");$("#voice-btn").textContent="▸ Activate Voice Link";if(!speaking)$("#comms-mode").textContent="STANDBY";};
+  try{recog.start();}catch(e){log("warn","[SYS]","could not start voice link");}
+}
+$("#voice-btn").addEventListener("click",toggleVoice);
+$("#cmd").addEventListener("keydown",e=>{
+  if(e.key==="Enter"&&e.target.value.trim()){handleCommand(e.target.value);e.target.value="";}
+});
+document.addEventListener("keydown",e=>{
+  if(e.target===$("#cmd"))return;
+  const k=e.key.toLowerCase();
+  if(k==="v")toggleVoice();
+  else if(k==="s")runScan();
+  else if(k==="m"){ttsOn=!ttsOn;$("#tts-state").textContent=ttsOn?"TTS ON":"TTS OFF";log("sys","[SYS]","TTS "+(ttsOn?"enabled":"muted"));}
+  else if(k==="/"){e.preventDefault();$("#cmd").focus();}
+});
+
+/* ---------- boot sequence ---------- */
+const BOOT=[
+  ["ADA KERNEL v2.1.0 — initializing",false],
+  ["> loading neural core .............. <b>OK</b>",true],
+  ["> mounting sensor grid [14 nodes] .. <b>OK</b>",true],
+  ["> calibrating voice matrix ......... <b>OK</b>",true],
+  ["> establishing sat uplink .......... <b>4/4 LOCKED</b>",true],
+  ["> crypto handshake AES-256-GCM ..... <b>SECURE</b>",true],
+  ["<b>WELCOME BACK, SAKET</b>",true],
+];
+function runBoot(){
+  const box=$("#boot-lines");
+  let i=0;
+  const iv=setInterval(()=>{
+    if(i>=BOOT.length){
+      clearInterval(iv);
+      setTimeout(()=>{
+        $("#boot").classList.add("gone");
+        setTimeout(()=>$("#boot").remove(),700);
+        log("ok","[SYS]","ADA core online · all subsystems nominal");
+        log("sys","[SYS]","type HELP or press V for voice link");
+        addContact(CITIES[0],true);addContact(CITIES[2],true);addContact(CITIES[4],true);
+        pushThreat(THREATS[2]);
+      },420);
+      return;
+    }
+    const[txt]=BOOT[i];
+    const d=document.createElement("div");
+    d.className="b-line"+(BOOT[i][1]?" u":"");
+    d.innerHTML=txt+(i===BOOT.length-1?' <span class="cursor"></span>':"");
+    box.appendChild(d);
+    i++;
+  },300);
+  $("#boot").addEventListener("click",()=>{clearInterval(iv);i=BOOT.length;});
+}
+
+/* ---------- main loop ---------- */
+function frame(now){
+  drawMap(now);
+  drawWave(now);
+  requestAnimationFrame(frame);
+}
+window.addEventListener("resize",()=>{sizeMap();sizeWave();});
+
+buildGauges();
+buildSubsys();
+sizeMap();sizeWave();
+setInterval(tickGauges,600);
+setInterval(ambientLog,2100);
+setInterval(()=>{if(Math.random()<.55)pushThreat();},7000);
+setInterval(()=>{if(contacts.length<4)addContact(pick(CITIES),true);},5000);
+if("speechSynthesis" in window)speechSynthesis.getVoices();
+runBoot();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
