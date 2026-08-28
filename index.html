@@ -582,7 +582,7 @@ function ambientLog(){
 
 /* ---------- voice ---------- */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-let recog=null,listening=false,ttsOn=true,speaking=false;
+let recog=null,listening=false,ttsOn=true,speaking=false,voicesReady=false;
 const waveCv=$("#wave"),wctx=waveCv.getContext("2d");
 function sizeWave(){
   const r=waveCv.getBoundingClientRect();
@@ -604,12 +604,18 @@ function drawWave(now){
     wctx.fillRect(i*bw+1,(H-h)/2,bw-2,h);
   }
 }
+function pickVoice(){
+  const vs=speechSynthesis.getVoices();
+  if(!vs.length)return null;
+  return vs.find(v=>/en[-_](IN|GB)/i.test(v.lang)&&/female|zira|heera|neerja|sonia|libby/i.test(v.name))
+      ||vs.find(v=>/^en/i.test(v.lang))
+      ||vs[0];
+}
 function speak(text){
   if(!ttsOn||!("speechSynthesis" in window))return;
   const u=new SpeechSynthesisUtterance(text);
   u.rate=1.04;u.pitch=1;
-  const vs=speechSynthesis.getVoices();
-  const v=vs.find(v=>/en[-_](IN|GB)/i.test(v.lang)&&/female|zira|heera|neerja|sonia|libby/i.test(v.name))||vs.find(v=>/^en/i.test(v.lang));
+  const v=pickVoice();
   if(v)u.voice=v;
   u.onstart=()=>{speaking=true;$("#comms-mode").textContent="RESPONDING";};
   u.onend=()=>{speaking=false;$("#comms-mode").textContent=listening?"LISTENING":"STANDBY";};
@@ -734,6 +740,12 @@ function frame(now){
 }
 window.addEventListener("resize",()=>{sizeMap();sizeWave();});
 
+// voice loading
+if("speechSynthesis" in window){
+  speechSynthesis.onvoiceschanged = () => { voicesReady = true; };
+  speechSynthesis.getVoices(); // trigger load
+}
+
 buildGauges();
 buildSubsys();
 sizeMap();sizeWave();
@@ -741,7 +753,6 @@ setInterval(tickGauges,600);
 setInterval(ambientLog,2100);
 setInterval(()=>{if(Math.random()<.55)pushThreat();},7000);
 setInterval(()=>{if(contacts.length<4)addContact(pick(CITIES),true);},5000);
-if("speechSynthesis" in window)speechSynthesis.getVoices();
 runBoot();
 requestAnimationFrame(frame);
 </script>
