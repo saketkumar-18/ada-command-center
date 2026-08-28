@@ -619,7 +619,8 @@ function speak(text){
   if(v)u.voice=v;
   u.onstart=()=>{speaking=true;$("#comms-mode").textContent="RESPONDING";};
   u.onend=()=>{speaking=false;$("#comms-mode").textContent=listening?"LISTENING":"STANDBY";};
-  speechSynthesis.cancel();
+  u.onerror=(e)=>{console.warn("TTS error:",e.error);speaking=false;$("#comms-mode").textContent=listening?"LISTENING":"STANDBY";};
+  // don't cancel - can prevent speech in some browsers
   speechSynthesis.speak(u);
 }
 function respond(text,sayIt=true){
@@ -742,8 +743,18 @@ window.addEventListener("resize",()=>{sizeMap();sizeWave();});
 
 // voice loading
 if("speechSynthesis" in window){
-  speechSynthesis.onvoiceschanged = () => { voicesReady = true; };
+  speechSynthesis.onvoiceschanged = () => { 
+    voicesReady = true; 
+    console.log("Voices loaded:", speechSynthesis.getVoices().length);
+  };
   speechSynthesis.getVoices(); // trigger load
+  // Fallback: check again after 2s
+  setTimeout(() => {
+    if(!voicesReady && speechSynthesis.getVoices().length){
+      voicesReady = true;
+      console.log("Voices loaded (timeout):", speechSynthesis.getVoices().length);
+    }
+  }, 2000);
 }
 
 buildGauges();
