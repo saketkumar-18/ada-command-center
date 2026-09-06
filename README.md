@@ -2,6 +2,8 @@
 
 > **A**utonomous **D**igital **A**ssistant — a browser-based mission-control HUD, inspired by the "build your own JARVIS" reel. Named for Ada Lovelace, the first programmer.
 
+**Live demo:** https://ada-command-center.vercel.app
+
 A single self-contained `index.html` — **zero dependencies, zero build step, zero network calls**. Open it in any modern browser and it boots.
 
 ## What you get
